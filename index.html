@@ -2,79 +2,78 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR Play Scan — Map Scene Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>AR Play Scan — Bettahalasuru Map</title>
 
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
-    <!-- MindAR — leave commented until the 3D scene is confirmed correct.
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    -->
 
     <style>
-      body { margin: 0; font-family: system-ui, sans-serif; }
-      #hud {
-        position: fixed; bottom: 12px; left: 12px; z-index: 10;
-        background: rgba(0,0,0,.65); color: #fff;
-        padding: 10px 14px; border-radius: 8px;
-        font-size: 12px; line-height: 1.5; pointer-events: none;
+      html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+
+      /* Prompt shown until the target is found, hidden while it is tracked. */
+      #scan-prompt {
+        position: fixed; inset: auto 0 32px 0; z-index: 10;
+        display: flex; justify-content: center; pointer-events: none;
+        transition: opacity .25s ease;
       }
-      #hud b { color: #00D4FF; }
+      #scan-prompt span {
+        background: rgba(0,0,0,.62); color: #fff;
+        padding: 10px 18px; border-radius: 999px;
+        font-size: 13px; letter-spacing: .04em; text-transform: uppercase;
+        backdrop-filter: blur(8px);
+      }
+      #scan-prompt.found { opacity: 0; }
     </style>
   </head>
 
   <body>
-    <div id="hud">
-      <b>Preview controls</b><br />
-      Drag to look · <b>W A S D</b> to move · <b>Ctrl+Alt+I</b> for the A-Frame inspector
-    </div>
-
-    <script>
-      /* Preview-only helper. A-Frame's look-controls zeroes the camera's
-         starting pitch/yaw, so a plain rotation="" on <a-camera> is ignored.
-         This applies the angle to look-controls' own objects instead.
-         Delete this script (and the preview camera below) when MindAR goes in. */
-      AFRAME.registerComponent('preview-cam', {
-        schema: { pitch: { default: -45 }, yaw: { default: 0 } },
-        init: function () {
-          const apply = () => {
-            const lc = this.el.components['look-controls'];
-            if (!lc || !lc.pitchObject) { return setTimeout(apply, 50); }
-            lc.pitchObject.rotation.x = THREE.MathUtils.degToRad(this.data.pitch);
-            lc.yawObject.rotation.y = THREE.MathUtils.degToRad(this.data.yaw);
-          };
-          this.el.sceneEl.addEventListener('loaded', apply);
-          apply();
-        }
-      });
-    </script>
+    <div id="scan-prompt"><span>Point at the marker</span></div>
 
     <!--
       SCENE NOTES
       -----------
-      Map plane is 10 x 8.4631 world units (matches map.png at 976 x 826 px).
-      It lies flat on the XZ plane, so world Y is up.
+      MindAR target: assets/targets.mind — one target (index 0), compiled from a
+      1147 x 1147 square image, so the tracked plane is 1 x 1 world units,
+      centred on the marker, lying in the target's XY plane with +Z pointing
+      out of the marker towards the camera.
 
-      Pixel -> world conversion used for every pole below:
+      #ar-anchor does the two jobs that turn the desktop scene into an AR one:
+        rotation="90 0 0"  — tips the Y-up map onto the marker, so the map lies
+                             flat on it and the poles stand out along +Z.
+        scale              — 0.1 makes the map exactly as wide as the marker.
+                             0.15 (current) makes it 1.5x the marker, which
+                             reads better as a table-top map. This is the only
+                             number to touch if the map feels too big or small.
+
+      Everything inside #map-root is unchanged from the desktop preview
+      (preview.html), so geometry tweaks can still be made there and copied over.
+
+      Map plane is 10 x 8.4631 units, matching map.png at 976 x 826 px.
+      Pixel -> local conversion used for every pole below:
         x = (px - 488) * 0.010246
         z = (py - 413) * 0.010246
-      Each pole carries its source pixel coordinate in a comment so you can
-      re-derive or nudge a point without recomputing the whole set.
-
       The pole model is 1.0 units tall with its base at y = 0, so a pole sits
       correctly on the map at y = 0 and its scale value IS its height.
+
+      SERVING: getUserMedia needs a secure context. localhost is fine for
+      desktop testing; testing on a phone needs HTTPS (ngrok, or GitHub Pages).
     -->
 
     <a-scene
+      mindar-image="imageTargetSrc: targets.mind; maxTrack: 1; uiScanning: no; uiLoading: no; filterMinCF: 0.0001; filterBeta: 0.001"
       color-space="sRGB"
-      renderer="colorManagement: true; physicallyCorrectLights: true"
+      renderer="colorManagement: true; antialias: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
-      background="color: #14171c"
     >
       <a-assets>
         <img id="mapTexture" src="assets/images/map.png" />
         <a-asset-item id="poleModel" src="assets/models/Electrical_Pole_01.glb"></a-asset-item>
       </a-assets>
+
+      <!-- MindAR drives this camera. Do not add look-controls or move it. -->
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <!-- Lighting -->
       <a-entity light="type: ambient; color: #ffffff; intensity: 0.9"></a-entity>
@@ -83,133 +82,83 @@
         position="4 8 5"
       ></a-entity>
 
-      <!--
-        MAP ROOT
-        Everything that should eventually be pinned to the AR target lives in here.
-        When MindAR goes in, wrap this entity in:
-          <a-entity mindar-image-target="targetIndex: 0"> ... </a-entity>
-        and drop the scale down (roughly scale="0.1 0.1 0.1") so the 10-unit map
-        fits the physical target card.
-      -->
-      <a-entity id="map-root" position="0 0 0">
-        <!-- The map itself. rotation -90 on X lays the plane flat. -->
-        <a-plane
-          id="map-plane"
-          src="#mapTexture"
-          width="10"
-          height="8.4631"
-          rotation="-90 0 0"
-          position="0 0 0"
-          material="shader: flat; side: double"
-        ></a-plane>
+      <!-- ============== TARGET 0 ============== -->
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
+        <a-entity id="ar-anchor" rotation="90 0 0" scale="0.15 0.15 0.15">
+          <a-entity id="map-root" position="0 0 0">
+            <!-- The map itself. rotation -90 on X lays the plane flat. -->
+            <a-plane
+              id="map-plane"
+              src="#mapTexture"
+              width="10"
+              height="8.4631"
+              rotation="-90 0 0"
+              position="0 0 0"
+              material="shader: flat; side: double"
+            ></a-plane>
 
-        <!-- ================= POLES ================= -->
-        <!-- scale="0.9 0.9 0.9" = 0.9 units tall. Change all nine to resize. -->
+            <!-- ================= POLES ================= -->
+            <!-- scale="0.9 0.9 0.9" = 0.9 map-units tall. -->
 
-        <!-- 01 — px(75, 140) · road, top-left near bus stop -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-4.232 0 -2.797"
-          scale="0.9 0.9 0.9"
-          rotation="0 0 0"
-        ></a-entity>
+            <!-- 01 — px(75, 140) · road, top-left near bus stop -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-4.232 0 -2.797" scale="0.9 0.9 0.9" rotation="0 0 0"></a-entity>
 
-        <!-- 02 — px(250, 88) · top road -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-2.439 0 -3.330"
-          scale="0.9 0.9 0.9"
-          rotation="0 25 0"
-        ></a-entity>
+            <!-- 02 — px(250, 88) · top road -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-2.439 0 -3.330" scale="0.9 0.9 0.9" rotation="0 25 0"></a-entity>
 
-        <!-- 03 — px(465, 300) · junction by Gnana Bharatgas Agency -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-0.236 0 -1.158"
-          scale="0.9 0.9 0.9"
-          rotation="0 -40 0"
-        ></a-entity>
+            <!-- 03 — px(465, 300) · junction by Gnana Bharatgas Agency -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-0.236 0 -1.158" scale="0.9 0.9 0.9" rotation="0 -40 0"></a-entity>
 
-        <!-- 04 — px(622, 60) · top-right road -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="1.373 0 -3.617"
-          scale="0.9 0.9 0.9"
-          rotation="0 10 0"
-        ></a-entity>
+            <!-- 04 — px(622, 60) · top-right road -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="1.373 0 -3.617" scale="0.9 0.9 0.9" rotation="0 10 0"></a-entity>
 
-        <!-- 05 — px(755, 473) · beside the Post Office -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="2.736 0 0.615"
-          scale="0.9 0.9 0.9"
-          rotation="0 -15 0"
-        ></a-entity>
+            <!-- 05 — px(755, 473) · beside the Post Office -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="2.736 0 0.615" scale="0.9 0.9 0.9" rotation="0 -15 0"></a-entity>
 
-        <!-- 06 — px(872, 250) · east road -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="3.934 0 -1.670"
-          scale="0.9 0.9 0.9"
-          rotation="0 60 0"
-        ></a-entity>
+            <!-- 06 — px(872, 250) · east road -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="3.934 0 -1.670" scale="0.9 0.9 0.9" rotation="0 60 0"></a-entity>
 
-        <!-- 07 — px(120, 655) · near the cricket ground -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-3.770 0 2.480"
-          scale="0.9 0.9 0.9"
-          rotation="0 -70 0"
-        ></a-entity>
+            <!-- 07 — px(120, 655) · near the cricket ground -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-3.770 0 2.480" scale="0.9 0.9 0.9" rotation="0 -70 0"></a-entity>
 
-        <!-- 08 — px(455, 700) · south road -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-0.338 0 2.941"
-          scale="0.9 0.9 0.9"
-          rotation="0 30 0"
-        ></a-entity>
+            <!-- 08 — px(455, 700) · south road -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-0.338 0 2.941" scale="0.9 0.9 0.9" rotation="0 30 0"></a-entity>
 
-        <!-- 09 — px(866, 675) · south-east corner near the bus stop -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="3.873 0 2.684"
-          scale="0.9 0.9 0.9"
-          rotation="0 -25 0"
-        ></a-entity>
+            <!-- 09 — px(866, 675) · south-east corner near the bus stop -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="3.873 0 2.684" scale="0.9 0.9 0.9" rotation="0 -25 0"></a-entity>
 
-        <!-- 10 — px(300, 430) · central junction -->
-        <a-entity
-          class="pole"
-          gltf-model="#poleModel"
-          position="-1.926 0 0.174"
-          scale="0.9 0.9 0.9"
-          rotation="0 45 0"
-        ></a-entity>
-        <!-- =============== END POLES =============== -->
+            <!-- 10 — px(300, 430) · central junction -->
+            <a-entity class="pole" gltf-model="#poleModel"
+              position="-1.926 0 0.174" scale="0.9 0.9 0.9" rotation="0 45 0"></a-entity>
+            <!-- =============== END POLES =============== -->
+          </a-entity>
+        </a-entity>
       </a-entity>
-
-      <!--
-        PREVIEW CAMERA — desktop inspection only.
-        Delete this whole entity when MindAR comes in; MindAR needs
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-      -->
-      <a-entity id="rig" position="0 7 7">
-        <a-camera
-          preview-cam="pitch: -45; yaw: 0"
-          look-controls="pointerLockEnabled: false"
-          wasd-controls="acceleration: 40; fly: true"
-        ></a-camera>
-      </a-entity>
+      <!-- ============ END TARGET 0 ============ -->
     </a-scene>
+
+    <script>
+      const prompt = document.getElementById('scan-prompt');
+      const target = document.getElementById('target-0');
+
+      target.addEventListener('targetFound', () => prompt.classList.add('found'));
+      target.addEventListener('targetLost', () => prompt.classList.remove('found'));
+
+      // Surface the two failures that look identical on a phone (a black screen):
+      // camera permission denied, and the .mind file failing to load.
+      document.querySelector('a-scene').addEventListener('arError', () => {
+        prompt.classList.remove('found');
+        prompt.querySelector('span').textContent = 'Camera unavailable — check permissions / HTTPS';
+      });
+    </script>
   </body>
 </html>
