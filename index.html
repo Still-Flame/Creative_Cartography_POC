@@ -11,7 +11,6 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
 
-      /* Prompt shown until the target is found, hidden while it is tracked. */
       #scan-prompt {
         position: fixed; inset: auto 0 32px 0; z-index: 10;
         display: flex; justify-content: center; pointer-events: none;
@@ -38,16 +37,21 @@
       centred on the marker, lying in the target's XY plane with +Z pointing
       out of the marker towards the camera.
 
+      Viewing from different angles needs no code: MindAR recovers the full
+      camera pose from the marker every frame, so walking around it — higher,
+      lower, off to one side — moves the scene correctly. The only rule is that
+      the marker has to stay in frame; the moment it leaves, tracking stops and
+      the content hides.
+
       #ar-anchor does the two jobs that turn the desktop scene into an AR one:
         rotation="90 0 0"  — tips the Y-up map onto the marker, so the map lies
                              flat on it and the poles stand out along +Z.
-        scale              — 0.1 makes the map exactly as wide as the marker.
-                             0.15 (current) makes it 1.5x the marker, which
-                             reads better as a table-top map. This is the only
-                             number to touch if the map feels too big or small.
+        scale="0.375"      — the map is 3.75x the width of the marker.
+                             0.1 would make it exactly marker-width. This is the
+                             one number to touch to resize the whole scene.
 
       Everything inside #map-root is unchanged from the desktop preview
-      (preview.html), so geometry tweaks can still be made there and copied over.
+      (preview.html), so geometry tweaks can be made there and copied over.
 
       Map plane is 10 x 8.4631 units, matching map.png at 976 x 826 px.
       Pixel -> local conversion used for every pole below:
@@ -61,13 +65,12 @@
     -->
 
     <a-scene
-      mindar-image="imageTargetSrc: targets.mind; maxTrack: 1; uiScanning: no; uiLoading: no; filterMinCF: 0.0001; filterBeta: 0.001"
-      color-space="sRGB"
+      mindar-image="imageTargetSrc: assets/targets.mind; maxTrack: 1"
       renderer="colorManagement: true; antialias: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
-      <a-assets>
+      <a-assets timeout="30000">
         <img id="mapTexture" src="assets/images/map.png" />
         <a-asset-item id="poleModel" src="assets/models/Electrical_Pole_01.glb"></a-asset-item>
       </a-assets>
@@ -84,9 +87,10 @@
 
       <!-- ============== TARGET 0 ============== -->
       <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-        <a-entity id="ar-anchor" rotation="90 0 0" scale="0.15 0.15 0.15">
+        <a-entity id="ar-anchor" rotation="90 0 0" scale="0.375 0.375 0.375">
           <a-entity id="map-root" position="0 0 0">
-            <!-- The map itself. rotation -90 on X lays the plane flat. -->
+            <!-- The map itself. rotation -90 on X lays the plane flat.
+                 side: double so it still reads when viewed from below. -->
             <a-plane
               id="map-plane"
               src="#mapTexture"
@@ -147,17 +151,16 @@
     </a-scene>
 
     <script>
-      const prompt = document.getElementById('scan-prompt');
+      const banner = document.getElementById('scan-prompt');
       const target = document.getElementById('target-0');
 
-      target.addEventListener('targetFound', () => prompt.classList.add('found'));
-      target.addEventListener('targetLost', () => prompt.classList.remove('found'));
+      target.addEventListener('targetFound', () => banner.classList.add('found'));
+      target.addEventListener('targetLost',  () => banner.classList.remove('found'));
 
-      // Surface the two failures that look identical on a phone (a black screen):
-      // camera permission denied, and the .mind file failing to load.
+      // A denied camera and a missing .mind file both look like a black screen.
       document.querySelector('a-scene').addEventListener('arError', () => {
-        prompt.classList.remove('found');
-        prompt.querySelector('span').textContent = 'Camera unavailable — check permissions / HTTPS';
+        banner.classList.remove('found');
+        banner.querySelector('span').textContent = 'Camera unavailable — check permissions / HTTPS';
       });
     </script>
   </body>
